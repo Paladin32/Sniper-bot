@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { handlePrefixCommand, cacheDeletedMessage, cacheEditedMessage } from './prefixCommands.js';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -501,6 +502,9 @@ client.on(Events.InteractionCreate, async interaction => {
   }
 });
 
+client.on(Events.MessageDelete, cacheDeletedMessage);
+client.on(Events.MessageUpdate, cacheEditedMessage);
+
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
@@ -522,7 +526,15 @@ client.on(Events.MessageCreate, async message => {
     return;
   }
 
-  if (message.guild) return;
+  if (message.guild) {
+    await handlePrefixCommand(message, {
+      postApplicationMenu,
+      postTicketPanel,
+      client,
+      makeApplicationEmbed: makeEmbed,
+    });
+    return;
+  }
   const session = sessions.get(message.author.id);
   if (!session || session.status !== 'answering') return;
 
