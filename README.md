@@ -9,6 +9,11 @@ A Discord application system for Staff, Middleman, Indexer, and Giveaway Hoster 
 - Users can submit or cancel after answering every question.
 - Submitted applications are sent to a private staff text channel.
 - Both `/setup-applications` and `s!setup-applications` setup commands are supported.
+- Support ticket panel with Claim a Reward, Host a Reward, and General Support options.
+- A short form asks what reward the user wants to claim or host before creating a private ticket channel.
+- Ticket channels are visible to the ticket creator, the bot, and optionally the configured support role.
+- Tickets have a close button; the ticket owner or staff with Manage Channels can close them.
+- Both `/setup-tickets` and `s!setup-tickets` setup commands are supported.
 - The setup commands are restricted to server administrators.
 
 ## Requirements
@@ -27,7 +32,8 @@ A Discord application system for Staff, Middleman, Indexer, and Giveaway Hoster 
 6. Set `DISCORD_TOKEN` and `STAFF_CHANNEL_ID` in `.env`. The staff channel should be private and visible to the bot.
 7. Install dependencies with `npm install`.
 8. Start the bot with `npm start`.
-9. In your Discord server, run `/setup-applications` or `s!setup-applications` in the channel where the application menu should appear.
+9. In your Discord server, run `/setup-applications` or `s!setup-applications` where the application menu should appear.
+10. Run `/setup-tickets` or `s!setup-tickets` where you want the Support panel to appear.
 
 ## Environment variables
 
@@ -35,6 +41,10 @@ A Discord application system for Staff, Middleman, Indexer, and Giveaway Hoster 
 - `STAFF_CHANNEL_ID` — ID of the private staff text channel receiving applications (required for submission).
 - `GUILD_ID` — optional server ID reserved for future deployment configuration.
 - `EMBED_COLOR` — optional embed colour in hexadecimal without `#`; defaults to Discord blurple.
+- `TICKET_CATEGORY_ID` — optional Discord category ID where new tickets are created.
+- `SUPPORT_ROLE_ID` — optional staff role ID that can see and be mentioned in tickets.
+- `SERVER_RULES_URL` — URL for your server rules page; replace the example URL before posting the panel.
+- Discord Terms of Service link is set to `https://discord.com/terms`.
 
 ## Application questions
 
