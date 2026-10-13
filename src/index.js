@@ -563,83 +563,98 @@ client.on(Events.InteractionCreate, async interaction => {
 client.on(Events.MessageDelete, cacheDeletedMessage);
 client.on(Events.MessageUpdate, cacheEditedMessage);
 
+let warnedAboutMessageContent = false;
 client.on(Events.MessageCreate, async message => {
-  if (message.author.bot) return;
+  try {
+    if (message.author.bot) return;
 
-  if (message.guild && message.content.trim().toLowerCase() === 's!setup-tickets') {
-    if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
-      await message.reply('Only server administrators can set up the ticket panel.');
+    // Prefix commands need the privileged Message Content intent enabled in the Discord Developer Portal.
+    if (message.guild && !message.content && !warnedAboutMessageContent) {
+      warnedAboutMessageContent = true;
+      console.error('Prefix commands may not work: Discord delivered a guild message without content. Check Developer Portal > Bot > Privileged Gateway Intents > Message Content Intent, then save and restart the bot.');
       return;
     }
-    await postTicketPanel(message.channel);
-    return;
-  }
 
-  if (message.guild && message.content.trim().toLowerCase() === 's!setup-applications') {
-    if (!message.member?.permissions.has('Administrator')) {
-      await message.reply('Only server administrators can set up the application menu.');
+    const content = message.content.trim().toLowerCase();
+    if (message.guild && content === 's!setup-tickets') {
+      if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+        await message.reply('Only server administrators can set up the ticket panel.');
+        return;
+      }
+      await postTicketPanel(message.channel);
       return;
     }
-    await postApplicationMenu(message.channel);
-    return;
-  }
 
-  if (message.guild) {
-    await handlePrefixCommand(message, {
-      postApplicationMenu,
-      postTicketPanel,
-      client,
-      makeApplicationEmbed: makeEmbed,
+    if (message.guild && content === 's!setup-applications') {
+      if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+        await message.reply('Only server administrators can set up the application menu.');
+        return;
+      }
+      await postApplicationMenu(message.channel);
+      return;
+    }
+
+    if (message.guild) {
+      if (content.startsWith('s!')) console.log('Prefix command received:', content.split(/\\s+/)[0]);
+      await handlePrefixCommand(message, {
+        postApplicationMenu,
+        postTicketPanel,
+        client,
+        makeApplicationEmbed: makeEmbed,
+      });
+      return;
+    }
+    const session = sessions.get(message.author.id);
+    if (!session || session.status !== 'answering') return;
+
+    const answer = message.content.trim();
+    if (!answer) {
+      await message.reply('Please send a text answer to continue.');
+      return;
+    }
+
+    session.answers[session.index] = answer.slice(0, 4000);
+    session.index += 1;
+
+    if (session.index < APPLICATIONS[session.type].questions.length) {
+      await sendQuestion(message.author, session).catch(error => {
+        console.error('Could not send next question:', error.message);
+      });
+      return;
+    }
+
+    session.status = 'review';
+    const buttons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`application:submit:${session.userId}`)
+        .setLabel('Submit')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`application:discard:${session.userId}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Danger),
+    );
+    await message.author.send({
+      embeds: [
+        makeEmbed(
+          'Confirm Submission',
+          [
+            'Are you sure you want to Submit?',
+            '',
+            'You have answered all the questions. Once submitted, staff will be able to review your application.',
+            '',
+            `Application ID: **${session.applicationId}**`,
+          ].join('\\n'),
+        ),
+      ],
+      components: [buttons],
     });
-    return;
-  }
-  const session = sessions.get(message.author.id);
-  if (!session || session.status !== 'answering') return;
-
-  const answer = message.content.trim();
-  if (!answer) {
-    await message.reply('Please send a text answer to continue.');
-    return;
-  }
-
-  session.answers[session.index] = answer.slice(0, 4000);
-  session.index += 1;
-
-  if (session.index < APPLICATIONS[session.type].questions.length) {
-    try {
-      await sendQuestion(message.author, session);
-    } catch (error) {
-      console.error('Could not send next question:', error.message);
+  } catch (error) {
+    console.error('MessageCreate handler error:', error);
+    if (message.guild && message.content?.trim().toLowerCase().startsWith('s!')) {
+      await message.reply('This command failed due to an internal error. The bot owner can check Railway deploy logs.').catch(() => {});
     }
-    return;
   }
-
-  session.status = 'review';
-  const buttons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`application:submit:${session.userId}`)
-      .setLabel('Submit')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`application:discard:${session.userId}`)
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger),
-  );
-  await message.author.send({
-    embeds: [
-      makeEmbed(
-        'Confirm Submission',
-        [
-          'Are you sure you want to Submit?',
-          '',
-          'You have answered all the questions. Once submitted, staff will be able to review your application.',
-          '',
-          `Application ID: **${session.applicationId}**`,
-        ].join('\n'),
-      ),
-    ],
-    components: [buttons],
-  });
 });
 
 client.login(token);
