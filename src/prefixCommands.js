@@ -3,6 +3,7 @@ import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 const cases = [];
 const voided = new Set();
 const skull = new Set();
+const antiAdmins = new Set();
 const deleted = new Map();
 const edited = new Map();
 const afk = new Map();
@@ -144,7 +145,8 @@ export async function handlePrefixCommand(m, { postApplicationMenu, postTicketPa
     if (cmd === 'antinuke') {
       if (!await need(m, PermissionFlagsBits.Administrator, 'Administrator')) return true;
       const act = a[0], id = idOf(a[1]); if (!['admin', 'remove'].includes(act) || !id) { await send(m, 'Usage: s!antinuke admin @user or s!antinuke remove @user'); return true; }
-      await send(m, act === 'admin' ? 'Added <@' + id + '> to anti-nuke admin list.' : 'Removed <@' + id + '> from anti-nuke admin list.'); return true;
+      if (act === 'admin') antiAdmins.add(id); else antiAdmins.delete(id);
+      await send(m, act === 'admin' ? 'Added <@' + id + '> to the anti-nuke admin allowlist.' : 'Removed <@' + id + '> from the anti-nuke admin allowlist.'); return true;
     }
     if (['nick', 'clearnick'].includes(cmd)) {
       if (!await need(m, PermissionFlagsBits.ManageNicknames, 'Manage Nicknames')) return true;
