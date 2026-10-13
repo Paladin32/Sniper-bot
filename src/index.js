@@ -595,7 +595,7 @@ client.on(Events.MessageCreate, async message => {
     }
 
     if (message.guild) {
-      if (content.startsWith('s!')) console.log('Prefix command received:', content.split(/\\s+/)[0]);
+      if (content.startsWith('s!')) console.log('Prefix command received:', content.split(/\s+/)[0]);
       await handlePrefixCommand(message, {
         postApplicationMenu,
         postTicketPanel,
