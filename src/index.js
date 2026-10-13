@@ -9,6 +9,10 @@ import {
   Events,
   GatewayIntentBits,
   MessageFlags,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  PermissionFlagsBits,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -17,6 +21,10 @@ import {
 
 const token = process.env.DISCORD_TOKEN;
 const staffChannelId = process.env.STAFF_CHANNEL_ID;
+const ticketCategoryId = process.env.TICKET_CATEGORY_ID?.trim();
+const supportRoleId = process.env.SUPPORT_ROLE_ID?.trim();
+const serverRulesUrl = process.env.SERVER_RULES_URL?.trim() || 'https://example.com/server-rules';
+const discordTosUrl = 'https://discord.com/terms';
 const guildId = process.env.GUILD_ID?.trim();
 const embedColor = Number.parseInt(process.env.EMBED_COLOR || '5865F2', 16);
 
@@ -92,6 +100,9 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('setup-applications')
     .setDescription('Post the Sniper Bot application menu in this channel.'),
+  new SlashCommandBuilder()
+    .setName('setup-tickets')
+    .setDescription('Post the Sniper Bot support ticket panel in this channel.'),
 ].map(command => command.toJSON());
 
 function makeEmbed(title, description) {
@@ -222,6 +233,96 @@ async function postApplicationMenu(channel) {
   await channel.send({ embeds: [embed], components: [row] });
 }
 
+
+function ticketPanelEmbed() {
+  return makeEmbed(
+    'Support',
+    [
+      '> Before creating a ticket, please read through our [Server Rules](' + serverRulesUrl + ') and [Discord’s Terms of Service](' + discordTosUrl + '). This ensures you know what is allowed and what isn’t.',
+      '',
+      '📍 **Always make sure to pick the right option.** Please select the option below that matches your request. You may be asked a few questions before your ticket is created.',
+    ].join('\\n'),
+  );
+}
+
+async function postTicketPanel(channel) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('ticket:choose')
+    .setPlaceholder('Select the reason for your ticket')
+    .addOptions(
+      { label: 'Claim a Reward', value: 'claim', description: 'Open a ticket to claim a reward', emoji: '🎁' },
+      { label: 'Host a Reward', value: 'host', description: 'Open a ticket to host a reward', emoji: '🎉' },
+      { label: 'General Support', value: 'support', description: 'Get help with something else', emoji: '💬' },
+    );
+  await channel.send({
+    embeds: [ticketPanelEmbed()],
+    components: [new ActionRowBuilder().addComponents(menu)],
+  });
+}
+
+function ticketQuestionModal(type) {
+  const isClaim = type === 'claim';
+  const modal = new ModalBuilder()
+    .setCustomId('ticket:modal:' + type)
+    .setTitle(isClaim ? 'Claim a Reward' : type === 'host' ? 'Host a Reward' : 'General Support');
+  const input = new TextInputBuilder()
+    .setCustomId('details')
+    .setLabel(isClaim ? 'What reward are you here to claim?' : type === 'host' ? 'What reward are you here to host?' : 'How can we help you?')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(1000)
+    .setPlaceholder(isClaim ? 'Describe the reward you want to claim' : type === 'host' ? 'Describe the reward you want to host' : 'Explain what you need help with');
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  return modal;
+}
+
+async function createTicketFromModal(interaction, type) {
+  const guild = interaction.guild;
+  if (!guild) {
+    await interaction.reply({ content: 'Tickets can only be created inside a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const details = interaction.fields.getTextInputValue('details').trim();
+  const safeName = interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 18) || 'user';
+  const suffix = interaction.user.id.slice(-4);
+  const channelName = `ticket-${type}-${safeName}-${suffix}`.slice(0, 90);
+  const overwrites = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles, PermissionFlagsBits.EmbedLinks] },
+    { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] },
+  ];
+  if (supportRoleId) overwrites.push({
+    id: supportRoleId,
+    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+  });
+
+  let parent;
+  if (ticketCategoryId) {
+    parent = await guild.channels.fetch(ticketCategoryId).catch(() => null);
+    if (!parent || parent.type !== ChannelType.GuildCategory) {
+      await interaction.reply({ content: 'TICKET_CATEGORY_ID is invalid. Please contact a server administrator.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+  }
+  const channel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    ...(parent ? { parent: parent.id } : {}),
+    permissionOverwrites: overwrites,
+    topic: `Ticket owner: ${interaction.user.id} | Type: ${type}`,
+  });
+  const typeLabel = type === 'claim' ? 'Claim a Reward' : type === 'host' ? 'Host a Reward' : 'General Support';
+  const embed = makeEmbed(
+    typeLabel,
+    `Hello <@${interaction.user.id}>! A staff member will help you soon.\\n\\n**${type === 'claim' ? 'Reward to claim' : type === 'host' ? 'Reward to host' : 'Request'}:**\\n${details}`,
+  );
+  const closeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ticket:close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger),
+  );
+  await channel.send({ content: supportRoleId ? `<@&${supportRoleId}> <@${interaction.user.id}>` : `<@${interaction.user.id}>`, embeds: [embed], components: [closeRow], allowedMentions: { users: [interaction.user.id], roles: supportRoleId ? [supportRoleId] : [] } });
+  await interaction.reply({ content: `Your ticket has been created: <#${channel.id}>`, flags: MessageFlags.Ephemeral });
+}
+
 client.once(Events.ClientReady, async readyClient => {
   console.log(`Sniper Bot is online as ${readyClient.user.tag}`);
   try {
@@ -238,6 +339,16 @@ client.once(Events.ClientReady, async readyClient => {
 
 client.on(Events.InteractionCreate, async interaction => {
   try {
+    if (interaction.isChatInputCommand() && interaction.commandName === 'setup-tickets') {
+      if (!interaction.inGuild() || !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+        await interaction.reply({ content: 'Only server administrators can set up the ticket panel.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await postTicketPanel(interaction.channel);
+      await interaction.reply({ content: 'The support ticket panel has been posted in this channel.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+
     if (interaction.isChatInputCommand() && interaction.commandName === 'setup-applications') {
       if (!interaction.inGuild() || !interaction.memberPermissions?.has('Administrator')) {
         await interaction.reply({
@@ -251,6 +362,43 @@ client.on(Events.InteractionCreate, async interaction => {
         content: 'The application menu has been posted in this channel.',
         flags: MessageFlags.Ephemeral,
       });
+      return;
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket:choose') {
+      const type = interaction.values[0];
+      if (!['claim', 'host', 'support'].includes(type)) {
+        await interaction.reply({ content: 'Unknown ticket type.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.showModal(ticketQuestionModal(type));
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket:modal:')) {
+      const type = interaction.customId.split(':')[2];
+      if (!['claim', 'host', 'support'].includes(type)) {
+        await interaction.reply({ content: 'Unknown ticket type.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await createTicketFromModal(interaction, type);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId === 'ticket:close') {
+      if (!interaction.inGuild() || !interaction.channel) {
+        await interaction.reply({ content: 'This ticket cannot be closed here.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels);
+      const isOwner = interaction.channel.topic?.includes('Ticket owner: ' + interaction.user.id);
+      if (!isAdmin && !isOwner) {
+        await interaction.reply({ content: 'Only the ticket owner or staff with Manage Channels can close this ticket.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await interaction.reply({ content: 'Closing this ticket in 3 seconds…', flags: MessageFlags.Ephemeral });
+      const channelToDelete = interaction.channel;
+      setTimeout(() => channelToDelete.delete('Ticket closed by ' + interaction.user.tag).catch(console.error), 3000);
       return;
     }
 
@@ -355,6 +503,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
+
+  if (message.guild && message.content.trim().toLowerCase() === 's!setup-tickets') {
+    if (!message.member?.permissions.has(PermissionFlagsBits.Administrator)) {
+      await message.reply('Only server administrators can set up the ticket panel.');
+      return;
+    }
+    await postTicketPanel(message.channel);
+    return;
+  }
 
   if (message.guild && message.content.trim().toLowerCase() === 's!setup-applications') {
     if (!message.member?.permissions.has('Administrator')) {
