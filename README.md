@@ -55,3 +55,38 @@ The bot uses the questions supplied for the four categories. Staff has seven que
 - Applicants must allow direct messages from server members.
 - The bot needs permission to send messages in the configured staff channel.
 - Keep `.env` private and never share your bot token.
+
+
+## Prefix command system
+
+All text commands use the `s!` prefix. The `s!help` command shows four categories: Moderation, Fun & Utilities, Server & Channel Tools, and Panels. Use `s!help moderation`, `s!help fun`, `s!help tools`, or `s!help panels` for a category list. The `s!helpstaff` command is intentionally not listed or implemented.
+
+### Moderation
+- `s!ban @user [reason]`, `s!hardban userID [reason]`, `s!hb userID [reason]`
+- `s!kick @user [reason]`
+- `s!mute @user 10m [reason]`, `s!unmute @user` (duration units: s, m, h, d; maximum 28 days)
+- `s!warn @user reason`, `s!unban userID [reason]`, `s!banlist [page]`
+- `s!modlogs @user|ID`, `s!modstats @user|ID`, `s!void @user|ID [case number]`
+- `s!antinuke admin @user`, `s!antinuke remove @user`
+- `s!nick @user nickname`, `s!clearnick @user`, `s!strip @user`
+
+### Fun & Utilities
+- `s!8ball question`, `s!cf` / `s!coinflip`, `s!afk [reason]`, `s!compliment`, `s!highfive @user`
+- `s!dih [@user]`, `s!puh [@user]` (fictional, non-serious measurement commands)
+- `s!snipe` / `s!s`, `s!editedsnipe` / `s!es`, `s!cs` / `s!clearsnipes`
+- `s!ping`, `s!av [@user|ID]` / `s!avatar [@user|ID]`
+
+### Server & Channel Tools
+- `s!clean`, `s!purge number` / `s!p number`, `s!autoskull`
+- `s!lock`, `s!unlock`, `s!serverinfo` / `s!si`
+- `s!say message`, `s!say embed message`
+
+### Panels
+- `s!application` — posts the application panel in the current channel.
+- `s!support` — posts the support ticket panel in the current channel.
+
+Panel posting is restricted to server administrators. Other commands check the relevant Discord permission and bot role hierarchy.
+
+## Notes on moderation data
+
+Moderation cases, AFK states, snipe caches, the auto-skull channel toggle, and the anti-nuke admin allowlist are currently kept in memory. They reset when the bot restarts. The anti-nuke commands manage an allowlist only; they do not constitute a full anti-nuke detection/protection system.
